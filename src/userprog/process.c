@@ -18,8 +18,12 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+const char *delimiters = " ";
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+static void argument_stack (char **parse, const int count, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -31,17 +35,40 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
+  char *fn_copy_copy; // fn_copy 를 저장하고 있을 변수
+  const char *thread_name; // thread_create 에 전달할 thread name
+  char *save_ptr; // strtok_r 의 save 이중 포인터
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+  fn_copy_copy = palloc_get_page (0);
+
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
 
+  if (fn_copy_copy == NULL)
+    return TID_ERROR;
+
+  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy_copy, fn_copy, PGSIZE);
+  
+  /* fn_copy_copy 에서 thread name 추출 */
+  thread_name = strtok_r(fn_copy_copy, delimiters, &save_ptr);
+
+  if (thread_name == NULL)
+    return TID_ERROR;
+
+  // puts(thread_name);
+  // puts(fn_copy);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (thread_name, PRI_DEFAULT, start_process, fn_copy);
+
+  if (tid == TID_ERROR) 
+    {
+      palloc_free_page (fn_copy); 
+      palloc_free_page (fn_copy_copy);
+    }
   return tid;
 }
 
@@ -54,19 +81,46 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  char **parse;
+  char *save_ptr;
+  char *temp;
+  char *load_file_name;
+
+  int count = 0;
+  int i;
+
+  for (temp = strtok_r (file_name, delimiters, &save_ptr);
+      temp != NULL;
+      temp = strtok_r (NULL, delimiters, &save_ptr), count++)
+    {
+      parse = (char **) realloc (parse, sizeof (char *) * (count + 1));
+      parse[count] = (char *) malloc (sizeof (char *) * strlen(temp));
+      strlcpy (parse[count], temp, sizeof (char *) * (strlen (temp) + 1));
+    }
+
+  load_file_name = parse[0];
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  success = load (load_file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
+  argument_stack(parse, count, &if_.esp);
 
+  for (i = 0; i < count; i++) {
+    free (parse[i]);
+  }
+  free (parse);
+
+  /* 메모리 내용을 확인하는 디버깅 코드 */
   hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -133,7 +187,7 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -317,7 +371,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
@@ -464,4 +518,48 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/* 유저 스택에 프로그램 이름과 인자들을 저장하는 함수 */
+/* parse: 프로그램 이름과 인자가 저장되어 있는 메모리 공간,
+   count: 인자의 개수,
+   esp: 스택 포인터를 가리키는 주소 */
+static void
+argument_stack (char **parse, int count, void **esp)
+{
+  int i, j;
+  uint32_t argv[count];
+
+  /* 프로그램 이름 및 인자 (문자열) 삽입 */
+  for (i = count - 1; i > -1; i--)
+    {
+      for (j = strlen(parse[i]); j > -1; j--)
+        {
+          /* 스택 주소를 감소시키면서 인자를 스택에 삽입 */
+          *esp = *esp -1;
+          ** (char **) esp = parse[i][j];
+        }
+      /* 프로그램 이름 및 인자 주소들 push */
+      argv[i] = (uint32_t) (*esp);
+    }
+
+  /* Word align */
+  *esp = (uint32_t) (*esp) & 0xfffffffc;
+  *esp -= 4;
+  memset (*esp, NULL, sizeof (int));
+
+  for (i = count - 1; i > -1; i--)
+    {
+      *esp -= 4;
+      *(uint32_t *) (*esp) = argv[i];
+    }
+
+  *esp -= 4;
+  *(uint32_t *) (*esp) = (uint32_t) (*esp) + 4;
+
+  *esp -= 4;
+  *(int *) (*esp) = (int) count;
+
+  *esp -= 4;
+  memset (*esp, NULL, sizeof (int));
 }
