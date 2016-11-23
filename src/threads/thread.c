@@ -206,6 +206,23 @@ thread_create (const char *name, int priority,
 
   intr_set_level (old_level);
 
+  t->parent = thread_current();
+  t->is_load = false;
+  t->is_exit = false;
+
+  sema_init (&t->exit_sema, 0);
+  sema_init (&t->load_sema, 0);
+
+  list_push_back (&t->parent->child_list, &t->child_elem);
+
+  t->fd = 2;
+  t->fd_table = palloc_get_page (0);
+  if (t->fd_table == NULL)
+    {
+      palloc_free_page (t);
+      return TID_ERROR;
+    }
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -299,6 +316,11 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
+  thread_current()->is_exit = true;
+  
+  if (strcmp (thread_name(), "main"))
+    sema_up (&thread_current()->exit_sema);
+    
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -383,7 +405,7 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -432,7 +454,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /* Execute the thread function. */
   thread_exit ();       /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread (void) 
@@ -470,6 +492,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  /* 자식 리스트 초기화 */
+  list_init (&t->child_list);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -541,7 +566,7 @@ thread_schedule_tail (struct thread *prev)
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
     {
       ASSERT (prev != cur);
-      palloc_free_page (prev);
+      // palloc_free_page (prev);
     }
 }
 
@@ -581,7 +606,7 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

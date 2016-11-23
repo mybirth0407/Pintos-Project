@@ -5,6 +5,9 @@
 #include <list.h>
 #include <stdint.h>
 
+#include "threads/synch.h"
+#include "filesys/file.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -96,6 +99,32 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+
+    /* Hierarchical Process Structure */
+    /* 부모 프로세스 디스크립터 */
+    struct thread *parent;
+    /* 자식 리스트 엘리먼트 */
+    struct list_elem child_elem;
+    /* 자식 리스트 */
+    struct list child_list;
+
+    /* 프로세스의 프로그램 메모리 적재 유무 */
+    bool is_load;
+    /* 프로세스 종료 유무 확인 */
+    bool is_exit;
+
+    /* exit 세마포어 */
+    struct semaphore exit_sema;
+    /* load 세마포어 */
+    struct semaphore load_sema;
+
+    /* exit 호출 시 종료 status */
+    int exit_status;
+
+    /* 파일 디스크립터 테이블 */
+    struct file **fd_table;
+    /* 현재 테이블에 존재하는 fd 의 최대값 +1 */
+    int fd;
 #endif
 
     /* Owned by thread.c. */

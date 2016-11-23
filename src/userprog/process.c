@@ -18,12 +18,20 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "threads/malloc.h"
+
 const char *delimiters = " ";
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 static void argument_stack (char **parse, const int count, void **esp);
+struct thread *get_child_process (int pid);
+void remove_child_process (struct thread *cp);
+
+int process_add_file (struct file *f);
+struct file *process_get_file (int fd);
+void process_close_file (int fd);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -81,7 +89,7 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  char **parse;
+  char **parse = (char **) malloc (sizeof (char *));
   char *save_ptr;
   char *temp;
   char *load_file_name;
@@ -107,11 +115,18 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   success = load (load_file_name, &if_.eip, &if_.esp);
-
+  
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success)
+    {
+      thread_current()->is_load = false;
+      sema_up (&thread_current()->load_sema);
+      thread_exit ();
+    }
+    
+  thread_current()->is_load = true;
+  sema_up (&thread_current()->load_sema);
 
   argument_stack(parse, count, &if_.esp);
 
@@ -121,7 +136,7 @@ start_process (void *file_name_)
   free (parse);
 
   /* 메모리 내용을 확인하는 디버깅 코드 */
-  hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
+  // hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -142,9 +157,15 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+  struct thread *cp = get_child_process (child_tid);
+  if (cp == NULL)
+    return -1;
+  sema_down (&cp->exit_sema);
+  int exit_status = cp->exit_status;
+  remove_child_process (cp);
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -153,6 +174,12 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  int i;
+  for (i = cur->fd; i > -1; i--)
+    process_close_file (i);
+
+  palloc_free_page (cur->fd_table);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -562,4 +589,57 @@ argument_stack (char **parse, int count, void **esp)
 
   *esp -= 4;
   memset (*esp, NULL, sizeof (int));
+}
+
+struct thread *
+get_child_process (int pid)
+{
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+
+  for (e = list_begin (&cur->child_list);
+      e != list_end (&cur->child_list);
+      e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      
+      if (pid == t->tid)
+        return t;
+    }
+  return NULL;
+}
+
+void
+remove_child_process (struct thread *cp)
+{
+  list_remove (&cp->child_elem);
+  palloc_free_page (cp);
+}
+
+int
+process_add_file (struct file *f)
+{
+  if (f == NULL)
+    return -1;
+
+  struct thread *t = thread_current();
+  t->fd_table[t->fd] = f;
+  return t->fd++;
+}
+
+struct file *
+process_get_file (int fd)
+{
+  struct file *f = thread_current()->fd_table[fd];
+  if (f == NULL)
+    return NULL;
+
+  return f;
+}
+
+void
+process_close_file (int fd)
+{
+  struct file *f = process_get_file (fd);
+  file_close (f);
 }
