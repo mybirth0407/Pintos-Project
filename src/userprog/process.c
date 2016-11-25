@@ -89,7 +89,7 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  char **parse = (char **) malloc (sizeof (char *));
+  char **parse;
   char *save_ptr;
   char *temp;
   char *load_file_name;
@@ -101,11 +101,15 @@ start_process (void *file_name_)
       temp != NULL;
       temp = strtok_r (NULL, delimiters, &save_ptr), count++)
     {
-      parse = (char **) realloc (parse, sizeof (char *) * (count + 1));
+      if (count != 0)
+        parse = (char **) realloc (parse, sizeof (char *) * (count + 1));
+      else
+        parse = (char **) malloc (sizeof (char *) * 1);
       parse[count] = (char *) malloc (sizeof (char *) * strlen(temp));
+      // puts("AAA");
+      // printf("%s\n", temp);
       strlcpy (parse[count], temp, sizeof (char *) * (strlen (temp) + 1));
     }
-
   load_file_name = parse[0];
 
   /* Initialize interrupt frame and load executable. */
@@ -130,9 +134,8 @@ start_process (void *file_name_)
 
   argument_stack(parse, count, &if_.esp);
 
-  for (i = 0; i < count; i++) {
+  for (i = 0; i < count; i++)
     free (parse[i]);
-  }
   free (parse);
 
   /* 메모리 내용을 확인하는 디버깅 코드 */
@@ -176,10 +179,10 @@ process_exit (void)
   uint32_t *pd;
 
   int i;
-  for (i = cur->fd; i > -1; i--)
+  for (i = 2; i < cur->fd; i++)
     process_close_file (i);
 
-  palloc_free_page (cur->fd_table);
+  palloc_free_page ((void *) cur->fd_table);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -594,6 +597,9 @@ argument_stack (char **parse, int count, void **esp)
 struct thread *
 get_child_process (int pid)
 {
+  if (pid < 0)
+    return NULL;
+
   struct thread *cur = thread_current();
   struct list_elem *e;
 
@@ -612,8 +618,10 @@ get_child_process (int pid)
 void
 remove_child_process (struct thread *cp)
 {
+  if (cp == NULL)
+    return;
   list_remove (&cp->child_elem);
-  palloc_free_page (cp);
+  palloc_free_page ((void *) cp);
 }
 
 int
@@ -630,16 +638,23 @@ process_add_file (struct file *f)
 struct file *
 process_get_file (int fd)
 {
-  struct file *f = thread_current()->fd_table[fd];
-  if (f == NULL)
-    return NULL;
+  if (fd > 1)
+    {
+      struct file *f = thread_current()->fd_table[fd];
+      if (f == NULL)
+        return NULL;
 
-  return f;
+      return f;
+    }
+  return NULL;
 }
 
 void
 process_close_file (int fd)
 {
-  struct file *f = process_get_file (fd);
-  file_close (f);
+  if (fd > 1)
+    {
+      struct file *f = process_get_file (fd);
+      file_close (f);
+    }
 }

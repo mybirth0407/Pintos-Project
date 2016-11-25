@@ -217,6 +217,10 @@ thread_create (const char *name, int priority,
 
   t->fd = 2;
   t->fd_table = palloc_get_page (0);
+  int i;
+  // for (i = 0; i < PGSIZE; i++)
+  //   t->fd_table[i] = NULL;
+  
   if (t->fd_table == NULL)
     {
       palloc_free_page (t);
@@ -317,7 +321,7 @@ thread_exit (void)
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current()->is_exit = true;
-  
+
   if (strcmp (thread_name(), "main"))
     sema_up (&thread_current()->exit_sema);
     

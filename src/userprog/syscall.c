@@ -164,15 +164,17 @@ exit (int status)
 bool
 create (const char *file, unsigned initial_size)
 {
+  check_address ((void *) file);
   lock_acquire (&file_lock);
   bool success = filesys_create (file, initial_size);
-  return success;
   lock_release (&file_lock);
+  return success;
 }
 
 bool
 remove (const char *file)
 {
+  check_address ((void *) file);
   lock_acquire (&file_lock);
   bool success = filesys_remove (file);
   lock_release (&file_lock);
@@ -182,12 +184,13 @@ remove (const char *file)
 tid_t
 exec (const char *cmd_line)
 {
+  check_address ((void *) cmd_line);
   tid_t tid = process_execute (cmd_line);
   struct thread *cp = get_child_process (tid);
   if (cp == NULL)
     return -1;
   sema_down (&thread_current ()->load_sema);
-  if (cp->is_load == false)
+  if (!cp->is_load)
     return -1;
   else
     return tid;
@@ -207,14 +210,6 @@ read (int fd, void *buffer, unsigned size)
   if (fd < 0)
     return -1;
 
-  lock_acquire (&file_lock);
-  struct file *f = process_get_file (fd);
-  if (f == NULL)
-    {
-      lock_release (&file_lock); 
-      return -1;
-    }
-    
   uint8_t *buf = (uint8_t *) buffer;
 
   if (fd == 0)
@@ -225,15 +220,21 @@ read (int fd, void *buffer, unsigned size)
           uint8_t input = input_getc ();
           buf[i] = input;
         }
-      lock_release (&file_lock);
       return size;
     }
-  else
+    
+  lock_acquire (&file_lock);
+  struct file *f = process_get_file (fd);
+  
+  if (f == NULL)
     {
-      off_t bytes = file_read (f, buffer, size);
       lock_release (&file_lock);
-      return bytes;
+      return -1;
     }
+    
+  off_t bytes = file_read (f, buffer, size);
+  lock_release (&file_lock);
+  return bytes;
 }
 
 off_t
@@ -243,21 +244,21 @@ write (int fd, void *buffer, unsigned size)
   if (fd < 0)
     return -1;
 
-  lock_acquire (&file_lock);
   struct file *f = process_get_file (fd);
 
   if (fd == 1)
     {
       putbuf ((const char *) buffer, size);
-      lock_release (&file_lock);
       return size;
     }
-  else
-    {
-      off_t bytes = file_write (f, buffer, size);
-      lock_release (&file_lock);
-      return bytes;
-    }
+
+  if (f == NULL)
+      return -1;
+
+  lock_acquire (&file_lock);
+  off_t bytes = file_write (f, buffer, size);
+  lock_release (&file_lock);
+  return bytes;
 }
 
 void
@@ -291,6 +292,7 @@ close (int fd)
 int
 open (const char *file)
 {
+  check_address ((void *) file);
   lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
   if (f == NULL)
