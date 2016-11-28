@@ -18,9 +18,12 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "threads/synch.h"
+
 #include "threads/malloc.h"
 
 const char *delimiters = " ";
+struct lock deny_write_lock;
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -42,7 +45,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-
+  lock_init (&deny_write_lock);
   char *fn_copy_copy; // fn_copy 를 저장하고 있을 변수
   const char *thread_name; // thread_create 에 전달할 thread name
   char *save_ptr; // strtok_r 의 save 이중 포인터
@@ -181,6 +184,7 @@ process_exit (void)
   int i;
   for (i = 2; i < cur->fd; i++)
     process_close_file (i);
+  file_close (cur->run_file);
 
   palloc_free_page ((void *) cur->fd_table);
 
@@ -307,13 +311,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  lock_acquire (&deny_write_lock);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
     {
+      lock_release (&deny_write_lock);
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+
+  t->run_file = file;
+  file_deny_write (file);
+  lock_release (&deny_write_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -398,7 +408,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  // file_close (file);
   return success;
 }
 
@@ -563,7 +573,7 @@ argument_stack (char **parse, int count, void **esp)
   /* 프로그램 이름 및 인자 (문자열) 삽입 */
   for (i = count - 1; i > -1; i--)
     {
-      for (j = strlen(parse[i]); j > -1; j--)
+      for (j = strlen (parse[i]); j > -1; j--)
         {
           /* 스택 주소를 감소시키면서 인자를 스택에 삽입 */
           *esp = *esp -1;
@@ -600,7 +610,7 @@ get_child_process (int pid)
   if (pid < 0)
     return NULL;
 
-  struct thread *cur = thread_current();
+  struct thread *cur = thread_current ();
   struct list_elem *e;
 
   for (e = list_begin (&cur->child_list);
@@ -630,7 +640,7 @@ process_add_file (struct file *f)
   if (f == NULL)
     return -1;
 
-  struct thread *t = thread_current();
+  struct thread *t = thread_current ();
   t->fd_table[t->fd] = f;
   return t->fd++;
 }
@@ -640,7 +650,7 @@ process_get_file (int fd)
 {
   if (fd > 1)
     {
-      struct file *f = thread_current()->fd_table[fd];
+      struct file *f = thread_current ()->fd_table[fd];
       if (f == NULL)
         return NULL;
 
@@ -656,5 +666,6 @@ process_close_file (int fd)
     {
       struct file *f = process_get_file (fd);
       file_close (f);
+      thread_current ()->fd--;
     }
 }

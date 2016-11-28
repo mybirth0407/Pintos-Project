@@ -125,6 +125,8 @@ struct thread
     struct file **fd_table;
     /* 현재 테이블에 존재하는 fd 의 최대값 +1 */
     int fd;
+    /* 현재 실행중인 파일 */
+    struct file *run_file;
 #endif
 
     /* Owned by thread.c. */

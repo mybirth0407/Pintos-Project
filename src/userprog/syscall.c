@@ -244,7 +244,8 @@ write (int fd, void *buffer, unsigned size)
   if (fd < 0)
     return -1;
 
-  struct file *f = process_get_file (fd);
+  if (size < 0)
+    return -1;
 
   if (fd == 1)
     {
@@ -252,6 +253,7 @@ write (int fd, void *buffer, unsigned size)
       return size;
     }
 
+  struct file *f = process_get_file (fd);
   if (f == NULL)
       return -1;
 
