@@ -45,10 +45,11 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  lock_init (&deny_write_lock);
   char *fn_copy_copy; // fn_copy 를 저장하고 있을 변수
   const char *thread_name; // thread_create 에 전달할 thread name
   char *save_ptr; // strtok_r 의 save 이중 포인터
+  
+  lock_init (&deny_write_lock);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -75,10 +76,10 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (thread_name, PRI_DEFAULT, start_process, fn_copy);
 
+  palloc_free_page (fn_copy_copy);
   if (tid == TID_ERROR) 
     {
       palloc_free_page (fn_copy); 
-      palloc_free_page (fn_copy_copy);
     }
   return tid;
 }
@@ -648,7 +649,7 @@ process_add_file (struct file *f)
 struct file *
 process_get_file (int fd)
 {
-  if (fd > 1)
+  if (fd > 0)
     {
       struct file *f = thread_current ()->fd_table[fd];
       if (f == NULL)
@@ -666,6 +667,7 @@ process_close_file (int fd)
     {
       struct file *f = process_get_file (fd);
       file_close (f);
-      thread_current ()->fd--;
+      // thread_current ()->fd--;
+      thread_current ()->fd_table[fd] = NULL;
     }
 }

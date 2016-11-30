@@ -58,68 +58,70 @@ syscall_handler (struct intr_frame *f)
   // printf ("system cll number = %d\n", syscall_n);
   switch (syscall_n)
     {
+      // 0
       case SYS_HALT:                   /* Halt the operating system. */
         halt ();
         break;
-      
+      // 1
       case SYS_EXIT:                   /* Terminate this process. */
         get_argument (sp, arg, 1);
           exit ((int) arg[0]);
         break;
-      
+      // 2
       case SYS_EXEC:                   /* Start another process. */
         get_argument (sp, arg, 1);
         f->eax = exec ((const char *) arg[0]);
         break;
-      
+      // 3
       case SYS_WAIT:                   /* Wait for a child process to die. */
         get_argument (sp, arg, 1);
         f->eax = wait ((int) arg[0]);
         break;
-      
+      // 4
       case SYS_CREATE:                 /* Create a file. */
         get_argument (sp, arg, 2);
         f->eax = create ((const char *) arg[0], (unsigned) arg[1]);
         break;
-      
+      // 5
       case SYS_REMOVE:                 /* Delete a file. */
         get_argument (sp, arg, 1);
         f->eax = remove ((const char *) arg[0]);
         break;
-      
+      // 6
       case SYS_OPEN:                   /* Open a file. */
         get_argument (sp, arg, 1);
         f->eax = open ((const char *) arg[0]);
         break;
-      
+      // 7
       case SYS_FILESIZE:               /* Obtain a file's size. */
         get_argument (sp, arg, 1);
         f->eax = filesize ((int) arg[0]);
-      
+      // 8
       case SYS_READ:                   /* Read from a file. */
         get_argument (sp, arg, 3);
         f->eax = read ((int) arg[0], (void *) arg[1], (unsigned) arg[2]);
         break;
-      
+      // 9
       case SYS_WRITE:                  /* Write to a file. */
         get_argument (sp, arg, 3);
         f->eax = write ((int) arg[0], (void *) arg[1], (unsigned) arg[2]);
         break;
-      
+      // 10
       case SYS_SEEK:                   /* Change position in a file. */
         get_argument (sp, arg, 2);
         seek ((int) arg[0], (unsigned) arg[1]);
         break;
-      
+      // 11
       case SYS_TELL:                   /* Report current position in a file. */
         get_argument (sp, arg, 1);
         f->eax = tell ((int) arg[0]);
         break;
-      
+      // 12
       case SYS_CLOSE:                  /* Close a file. */
         get_argument (sp, arg, 1);
         close ((int) arg[0]);
         break;
+
       default:
         NOT_REACHED ()
     }
@@ -189,7 +191,7 @@ exec (const char *cmd_line)
   struct thread *cp = get_child_process (tid);
   if (cp == NULL)
     return -1;
-  sema_down (&thread_current ()->load_sema);
+  sema_down (&cp->load_sema);
   if (!cp->is_load)
     return -1;
   else
@@ -210,6 +212,9 @@ read (int fd, void *buffer, unsigned size)
   if (fd < 0)
     return -1;
 
+  if (size < 0)
+    return -1;
+
   uint8_t *buf = (uint8_t *) buffer;
 
   if (fd == 0)
@@ -220,18 +225,18 @@ read (int fd, void *buffer, unsigned size)
           uint8_t input = input_getc ();
           buf[i] = input;
         }
-      return size;
+      return (off_t) size;
     }
     
   lock_acquire (&file_lock);
   struct file *f = process_get_file (fd);
-  
   if (f == NULL)
     {
       lock_release (&file_lock);
       return -1;
     }
     
+
   off_t bytes = file_read (f, buffer, size);
   lock_release (&file_lock);
   return bytes;
@@ -250,14 +255,14 @@ write (int fd, void *buffer, unsigned size)
   if (fd == 1)
     {
       putbuf ((const char *) buffer, size);
-      return size;
+      return (off_t) size;
     }
 
+  lock_acquire (&file_lock);
   struct file *f = process_get_file (fd);
   if (f == NULL)
       return -1;
 
-  lock_acquire (&file_lock);
   off_t bytes = file_write (f, buffer, size);
   lock_release (&file_lock);
   return bytes;
@@ -297,24 +302,29 @@ open (const char *file)
   check_address ((void *) file);
   lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
+  lock_release (&file_lock);
   if (f == NULL)
     {
-      lock_release (&file_lock);
       return -1;
     }
   int fd = process_add_file (f);
-  lock_release (&file_lock);
+  // lock_release (&file_lock);
   return fd;
 }
 
 int
 filesize (int fd)
 {
-  lock_acquire (&file_lock);
-  struct file *f = process_get_file (fd);
-  if (f == NULL)
+  if (fd > 0)
+    {
+      struct file *f = process_get_file (fd);
+      if (f == NULL)
+        return -1;
+      lock_acquire (&file_lock);
+      off_t length = file_length (f);
+      lock_release (&file_lock);
+      return (int) length;
+    }
+  else
     return -1;
-  off_t length = file_length (f);
-  lock_release (&file_lock);
-  return (int) length;
 }

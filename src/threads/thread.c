@@ -213,6 +213,7 @@ thread_create (const char *name, int priority,
   sema_init (&t->exit_sema, 0);
   sema_init (&t->load_sema, 0);
 
+  list_init(&t->child_list);
   list_push_back (&t->parent->child_list, &t->child_elem);
 
   t->fd = 2;
