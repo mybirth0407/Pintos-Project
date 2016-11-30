@@ -40,6 +40,7 @@ void process_close_file (int fd);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+
 tid_t
 process_execute (const char *file_name) 
 {
@@ -48,7 +49,7 @@ process_execute (const char *file_name)
   char *fn_copy_copy; // fn_copy 를 저장하고 있을 변수
   const char *thread_name; // thread_create 에 전달할 thread name
   char *save_ptr; // strtok_r 의 save 이중 포인터
-  
+
   lock_init (&deny_write_lock);
 
   /* Make a copy of FILE_NAME.
@@ -123,21 +124,21 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   success = load (load_file_name, &if_.eip, &if_.esp);
-  
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success)
     {
-      thread_current()->is_load = false;
-      sema_up (&thread_current()->load_sema);
+      struct thread *t = thread_current ();
+      t->is_load = false;
+      sema_up (&t->load_sema);
       thread_exit ();
     }
     
-  thread_current()->is_load = true;
-  sema_up (&thread_current()->load_sema);
+  struct thread *t = thread_current ();
+  t->is_load = true;
+  sema_up (&t->load_sema);
 
   argument_stack(parse, count, &if_.esp);
-
   for (i = 0; i < count; i++)
     free (parse[i]);
   free (parse);
@@ -406,6 +407,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
+  return success;
 
  done:
   /* We arrive here whether the load is successful or not. */
