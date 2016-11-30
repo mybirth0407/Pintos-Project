@@ -18,22 +18,31 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+/* malloc 사용을 위해 */
+#include "threads/malloc.h"
+/* lock 관련 함수들 사용 */
 #include "threads/synch.h"
 
-#include "threads/malloc.h"
-
+/* 프로그램 인자 구분할 구분자 */
 const char *delimiters = " ";
+/* 실행중인 파일에 대해 쓰기 거부할 lock */
 struct lock deny_write_lock;
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+/* 전달받은 인자를 유저 스택에 쌓음 */
 static void argument_stack (char **parse, const int count, void **esp);
+/* 전달받은 pid 로 자식 리스트를 검색하여 해당 프로세스 디스크립터 반환  */
 struct thread *get_child_process (int pid);
+/* 전달받은 자식 프로세스를 제거 */
 void remove_child_process (struct thread *cp);
 
+/* 전달받은 파일을 프로세스의 파일 디스크립터 테이블에 삽입  */
 int process_add_file (struct file *f);
+/* 전달받은 fd 에 해당하는 파일을 반환 */
 struct file *process_get_file (int fd);
+/* 전달받은 fd 에 해당하는 파일을 닫음 */
 void process_close_file (int fd);
 
 /* Starts a new thread running a user program loaded from
@@ -46,15 +55,20 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  char *fn_copy_copy; // fn_copy 를 저장하고 있을 변수
-  const char *thread_name; // thread_create 에 전달할 thread name
-  char *save_ptr; // strtok_r 의 save 이중 포인터
+  /* fn_copy 를 저장하고 있을 변수 */
+  char *fn_copy_copy;
+  /* thread_create 에 전달할 thread_name */
+  const char *thread_name;
+  /* strtok_r 에 전달할 save 포인터 */
+  char *save_ptr;
 
+  /* 쓰기 거부 락을 초기화 */
   lock_init (&deny_write_lock);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+  /* parsing 되지 않은 전체 프로그램 인자를 저장할 임시 변수 */
   fn_copy_copy = palloc_get_page (0);
 
   if (fn_copy == NULL)
@@ -63,6 +77,7 @@ process_execute (const char *file_name)
   if (fn_copy_copy == NULL)
     return TID_ERROR;
 
+  /* 전체 프로그램 인자를 복사 */
   strlcpy (fn_copy, file_name, PGSIZE);
   strlcpy (fn_copy_copy, fn_copy, PGSIZE);
   
@@ -72,11 +87,10 @@ process_execute (const char *file_name)
   if (thread_name == NULL)
     return TID_ERROR;
 
-  // puts(thread_name);
-  // puts(fn_copy);
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (thread_name, PRI_DEFAULT, start_process, fn_copy);
 
+  /* 임시 변수에 할당된 메모리를 해제 */
   palloc_free_page (fn_copy_copy);
   if (tid == TID_ERROR) 
     {
@@ -94,25 +108,30 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  /* parsing 된 인자들을 가질 이차원 배열 */
   char **parse;
+  /* strtok_r 의 save 포인터 */
   char *save_ptr;
-  char *temp;
+  /* load () 에 전달할 file name */
   char *load_file_name;
+  char *temp;
 
+  /* 인자의 개수 */
   int count = 0;
   int i;
 
+  /* delemiters 를 구분자로 전달받은 file name 을 parsing */
   for (temp = strtok_r (file_name, delimiters, &save_ptr);
       temp != NULL;
       temp = strtok_r (NULL, delimiters, &save_ptr), count++)
     {
+      /* 처음만 malloc */
       if (count != 0)
         parse = (char **) realloc (parse, sizeof (char *) * (count + 1));
       else
         parse = (char **) malloc (sizeof (char *) * 1);
+
       parse[count] = (char *) malloc (sizeof (char *) * strlen(temp));
-      // puts("AAA");
-      // printf("%s\n", temp);
       strlcpy (parse[count], temp, sizeof (char *) * (strlen (temp) + 1));
     }
   load_file_name = parse[0];
@@ -129,16 +148,22 @@ start_process (void *file_name_)
   if (!success)
     {
       struct thread *t = thread_current ();
+      /* load 에 실패하였으므로 thread 의 is_load 필드를 false 로 변경 */
       t->is_load = false;
+      /* load_sema 를 up 시켜 더 이상 대기하지 않도록 함 */
       sema_up (&t->load_sema);
       thread_exit ();
     }
     
   struct thread *t = thread_current ();
+  /* load 에 성공했으므로 thread 의 is_load 필드를 true 로 변경 */
   t->is_load = true;
+  /* load_sema 를 up 시켜 더 이상 대기하지 않도록 함 */
   sema_up (&t->load_sema);
 
+  /* 유저 스택에 파싱한 인자들을 쌓음 */
   argument_stack(parse, count, &if_.esp);
+  /* 인자들을 저장했던 배열의 메모리를 해제 */
   for (i = 0; i < count; i++)
     free (parse[i]);
   free (parse);
@@ -170,8 +195,11 @@ process_wait (tid_t child_tid)
   struct thread *cp = get_child_process (child_tid);
   if (cp == NULL)
     return -1;
+  /* exit_sema 를 down 시켜 부모 프로세스 대기 */
   sema_down (&cp->exit_sema);
+  /* 프로세스의 종료 코드를 저장 */
   int exit_status = cp->exit_status;
+  /* 자식 프로세스를 제거 */
   remove_child_process (cp);
   return exit_status;
 }
@@ -183,11 +211,14 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* 프로세스의 모든 파일을 닫음 */
   int i;
   for (i = 2; i < cur->fd; i++)
     process_close_file (i);
+  /* 현재 프로세스의 실행중인 파일을 닫음 */
   file_close (cur->run_file);
 
+  /* 프로세스의 파일 디스크립터 테이블 메모리를 해제 */
   palloc_free_page ((void *) cur->fd_table);
 
   /* Destroy the current process's page directory and switch back
@@ -313,6 +344,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  /* 쓰기 거부 락 획득 */
   lock_acquire (&deny_write_lock);
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -323,8 +355,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
+  /* 프로세스의 실행 파일을 현재 파일로 지정 */
   t->run_file = file;
+  /* 현재 파일에 쓰기 거부*/
   file_deny_write (file);
+  /* 쓰기 거부 락 해제 */
   lock_release (&deny_write_lock);
 
   /* Read and verify executable header. */
@@ -407,10 +442,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-  return success;
 
  done:
   /* We arrive here whether the load is successful or not. */
+  /* 해당 파일은 프로세스가 종료될 때 삭제됨 */
   // file_close (file);
   return success;
 }
@@ -563,8 +598,8 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-/* 유저 스택에 프로그램 이름과 인자들을 저장하는 함수 */
-/* parse: 프로그램 이름과 인자가 저장되어 있는 메모리 공간,
+/* 유저 스택에 프로그램 이름과 인자들을 저장하는 함수 
+   parse: 프로그램 이름과 인자가 저장되어 있는 메모리 공간,
    count: 인자의 개수,
    esp: 스택 포인터를 가리키는 주소 */
 static void
@@ -579,10 +614,9 @@ argument_stack (char **parse, int count, void **esp)
       for (j = strlen (parse[i]); j > -1; j--)
         {
           /* 스택 주소를 감소시키면서 인자를 스택에 삽입 */
-          *esp = *esp -1;
+          *esp = *esp - 1;
           ** (char **) esp = parse[i][j];
         }
-      /* 프로그램 이름 및 인자 주소들 push */
       argv[i] = (uint32_t) (*esp);
     }
 
@@ -593,13 +627,14 @@ argument_stack (char **parse, int count, void **esp)
 
   for (i = count - 1; i > -1; i--)
     {
+      /* 프로그램 이름 및 인자 주소들 삽입 */
       *esp -= 4;
       *(uint32_t *) (*esp) = argv[i];
     }
-
+  /* **argv 삽입 */
   *esp -= 4;
   *(uint32_t *) (*esp) = (uint32_t) (*esp) + 4;
-
+  /* argc 삽입 */
   *esp -= 4;
   *(int *) (*esp) = (int) count;
 
@@ -616,6 +651,7 @@ get_child_process (int pid)
   struct thread *cur = thread_current ();
   struct list_elem *e;
 
+  /* 자식 리스트를 순회하며 pid 에 해당하는 자식 thread 를 검색 */
   for (e = list_begin (&cur->child_list);
       e != list_end (&cur->child_list);
       e = list_next (e))
@@ -631,10 +667,11 @@ get_child_process (int pid)
 void
 remove_child_process (struct thread *cp)
 {
-  if (cp == NULL)
-    return;
-  list_remove (&cp->child_elem);
-  palloc_free_page ((void *) cp);
+  if (cp != NULL)
+    {
+      list_remove (&cp->child_elem);
+      palloc_free_page ((void *) cp);
+    }
 }
 
 int
@@ -669,7 +706,7 @@ process_close_file (int fd)
     {
       struct file *f = process_get_file (fd);
       file_close (f);
-      // thread_current ()->fd--;
+      /* 파일 디스크립터 테이블은 충분하므로 fd 를 -1 하지 않아도 됨 */
       thread_current ()->fd_table[fd] = NULL;
     }
 }
