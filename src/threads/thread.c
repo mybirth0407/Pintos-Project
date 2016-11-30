@@ -218,9 +218,6 @@ thread_create (const char *name, int priority,
 
   t->fd = 2;
   t->fd_table = palloc_get_page (0);
-  int i;
-  // for (i = 0; i < PGSIZE; i++)
-  //   t->fd_table[i] = NULL;
   
   if (t->fd_table == NULL)
     {

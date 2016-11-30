@@ -55,7 +55,7 @@ syscall_handler (struct intr_frame *f)
 
   int syscall_n = *sp;
   sp++;
-  // printf ("system cll number = %d\n", syscall_n);
+  // printf ("system call number = %d\n", syscall_n);
   switch (syscall_n)
     {
       // 0
@@ -96,6 +96,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_FILESIZE:               /* Obtain a file's size. */
         get_argument (sp, arg, 1);
         f->eax = filesize ((int) arg[0]);
+        break;
       // 8
       case SYS_READ:                   /* Read from a file. */
         get_argument (sp, arg, 3);
