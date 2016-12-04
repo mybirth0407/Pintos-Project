@@ -99,6 +99,10 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+#endif
+
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
 
     /* Hierarchical Process Structure */
     /* 부모 프로세스 디스크립터 */
@@ -127,10 +131,10 @@ struct thread
     int fd;
     /* 현재 실행중인 파일 */
     struct file *run_file;
-#endif
 
-    /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
+    /* Alarm System Call*/
+    /* 해당 thread 가 깨어나야 할 tick */
+    int64_t wakeup_tick;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -168,5 +172,11 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Alarm System Call */
+void thread_sleep (int64_t ticks);
+void thread_awake (int64_t ticks);
+void update_next_tick_to_awake (int64_t ticks);
+int64_t get_next_tick_to_awake (void);
 
 #endif /* threads/thread.h */

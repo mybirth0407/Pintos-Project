@@ -12,6 +12,7 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+/* Page fault 시 exit 호출 */
 static void exit (int status);
 
 /* Registers handlers for interrupts that can be caused by user
@@ -151,6 +152,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
+  /* exit 호출 */
   exit (-1);
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

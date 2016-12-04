@@ -37,6 +37,13 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+/* THREAD_BLOCKED 상태의 thread 를 관리하기 위한 리스트 */
+static struct list sleep_list;
+
+/* sleep_list 에서 대기중인 thread 들의 wakeup tick 값 중 최소값 */
+static int64_t next_tick_to_awake;
+
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -92,7 +99,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-
+  list_init (&sleep_list);
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -206,6 +213,7 @@ thread_create (const char *name, int priority,
 
   intr_set_level (old_level);
 
+  /* 자식 thread 를 초기화   */
   t->parent = thread_current();
   t->is_load = false;
   t->is_exit = false;
@@ -320,6 +328,7 @@ thread_exit (void)
   list_remove (&thread_current()->allelem);
   thread_current()->is_exit = true;
 
+  /* 메인 쓰레드가 아니라면 현재 thread 는 더 이상 대기하지 않음 */
   if (strcmp (thread_name(), "main"))
     sema_up (&thread_current()->exit_sema);
     
@@ -612,3 +621,73 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* 실행 중인 thread 를 sleep 으로 만듬 */
+void
+thread_sleep (int64_t ticks)
+{
+  /* 이전 인터럽트 레벨을 저장하고 이후부터는 인터럽트를 받지 않음 */
+  enum intr_level old_level = intr_disable ();
+  struct thread *t = thread_current ();
+
+  /* 현재 thread 가 idle thread 가 아니라면 thread 가 깨어나야 할 틱을 저장 */
+  if (t != idle_thread)
+    t->wakeup_tick = ticks;
+
+  /* thread 를 sleep queue  */
+  list_push_back (&sleep_list, &t->elem);
+
+  /* tick 값을 update */
+  update_next_tick_to_awake (ticks);
+  /* 현재 thread 의 state 를 THREAD BLOCKED 상태로 바꾸고 스케줄링 */
+  thread_block ();
+
+  /* 다시 인터럽트 레벨을 이전과 같이 설정하고, 이후부터는 인터럽트를 받음 */
+  intr_set_level (old_level);
+}
+
+/* Sleep queue 에서 깨워야 할 thread 를 깨움 */
+void
+thread_awake (int64_t ticks)
+{
+  /* 작은 수를 찾아야 하기 때문에 매우 큰 수로 설정 */
+  next_tick_to_awake = INT64_MAX;
+
+  struct list_elem *e;
+
+  /* 모든 리스트를 순회하며 */
+  for (e = list_begin (&sleep_list);
+       e != list_end (&sleep_list);
+       e)
+    {
+      struct thread *t = list_entry(e, struct thread, elem);
+
+      /* thread 가 깨어나야 하는 thread 라면 */
+      if (ticks >= t->wakeup_tick)
+        {
+          e = list_remove (&t->elem);
+          thread_unblock (t);
+        }
+      else
+        {
+          update_next_tick_to_awake (t->wakeup_tick);
+          e = list_next (e);
+        }
+    }
+}
+
+/*최소 틱을 가진 thread 저장 */
+void
+update_next_tick_to_awake (int64_t ticks)
+{
+  /* ticks 와 next_tick_to_awake 중 더 작은 것을 선택  */
+  next_tick_to_awake = (ticks < next_tick_to_awake) ?
+                        ticks: next_tick_to_awake; 
+}
+
+/* thread.c 의 next_tick_to_awake 반환 */
+int64_t
+get_next_tick_to_awake (void)
+{
+  return next_tick_to_awake;
+}

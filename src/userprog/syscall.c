@@ -15,9 +15,12 @@
 
 #define USER_VADDR_BOTTOM ((void *) 0x8048000)
 
+/* File 관련 함수를 위한 lock */
 struct lock file_lock;
 
 static void syscall_handler (struct intr_frame *);
+
+/* Systam Call */
 void check_address (void *addr);
 void get_argument (void *esp, int *arg, int count);
 
@@ -26,9 +29,11 @@ void exit(int status);
 bool create (const char *file, unsigned initial_size);
 bool remove (const char *file);
 
+/* Hierarchical Process Structure */
 tid_t exec (const char *cmd_line);
 int wait (tid_t tid);
 
+/* File Description */
 void close (int fd);
 off_t read (int fd, void *buffer, unsigned size);
 off_t write (int fd, void *buffer, unsigned size);
@@ -190,9 +195,12 @@ exec (const char *cmd_line)
   check_address ((void *) cmd_line);
   tid_t tid = process_execute (cmd_line);
   struct thread *cp = get_child_process (tid);
+
   if (cp == NULL)
     return -1;
+
   sema_down (&cp->load_sema);
+
   if (!cp->is_load)
     return -1;
   else
@@ -231,12 +239,12 @@ read (int fd, void *buffer, unsigned size)
     
   lock_acquire (&file_lock);
   struct file *f = process_get_file (fd);
+
   if (f == NULL)
     {
       lock_release (&file_lock);
       return -1;
     }
-    
 
   off_t bytes = file_read (f, buffer, size);
   lock_release (&file_lock);
@@ -261,6 +269,7 @@ write (int fd, void *buffer, unsigned size)
 
   lock_acquire (&file_lock);
   struct file *f = process_get_file (fd);
+
   if (f == NULL)
       return -1;
 
@@ -304,6 +313,7 @@ open (const char *file)
   lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
   lock_release (&file_lock);
+
   if (f == NULL)
     {
       return -1;
@@ -319,8 +329,10 @@ filesize (int fd)
   if (fd > 0)
     {
       struct file *f = process_get_file (fd);
+      
       if (f == NULL)
         return -1;
+
       lock_acquire (&file_lock);
       off_t length = file_length (f);
       lock_release (&file_lock);

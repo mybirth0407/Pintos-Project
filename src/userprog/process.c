@@ -31,18 +31,16 @@ struct lock deny_write_lock;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-/* 전달받은 인자를 유저 스택에 쌓음 */
+/* Command Line Parsing */
 static void argument_stack (char **parse, const int count, void **esp);
-/* 전달받은 pid 로 자식 리스트를 검색하여 해당 프로세스 디스크립터 반환  */
+
+/* Hierarchical Process Structure */
 struct thread *get_child_process (int pid);
-/* 전달받은 자식 프로세스를 제거 */
 void remove_child_process (struct thread *cp);
 
-/* 전달받은 파일을 프로세스의 파일 디스크립터 테이블에 삽입  */
+/* File Description */
 int process_add_file (struct file *f);
-/* 전달받은 fd 에 해당하는 파일을 반환 */
 struct file *process_get_file (int fd);
-/* 전달받은 fd 에 해당하는 파일을 닫음 */
 void process_close_file (int fd);
 
 /* Starts a new thread running a user program loaded from
@@ -93,9 +91,8 @@ process_execute (const char *file_name)
   /* 임시 변수에 할당된 메모리를 해제 */
   palloc_free_page (fn_copy_copy);
   if (tid == TID_ERROR) 
-    {
       palloc_free_page (fn_copy); 
-    }
+    
   return tid;
 }
 
@@ -642,6 +639,7 @@ argument_stack (char **parse, int count, void **esp)
   memset (*esp, NULL, sizeof (int));
 }
 
+/* 전달받은 pid 로 자식 리스트를 검색하여 해당 프로세스 디스크립터 반환  */
 struct thread *
 get_child_process (int pid)
 {
@@ -664,6 +662,7 @@ get_child_process (int pid)
   return NULL;
 }
 
+/* 전달받은 자식 프로세스를 제거 */
 void
 remove_child_process (struct thread *cp)
 {
@@ -674,6 +673,7 @@ remove_child_process (struct thread *cp)
     }
 }
 
+/* 전달받은 파일을 프로세스의 파일 디스크립터 테이블에 삽입  */
 int
 process_add_file (struct file *f)
 {
@@ -685,6 +685,7 @@ process_add_file (struct file *f)
   return t->fd++;
 }
 
+/* 전달받은 fd 에 해당하는 파일을 반환 */
 struct file *
 process_get_file (int fd)
 {
@@ -699,6 +700,7 @@ process_get_file (int fd)
   return NULL;
 }
 
+/* 전달받은 fd 에 해당하는 파일을 닫음 */
 void
 process_close_file (int fd)
 {
