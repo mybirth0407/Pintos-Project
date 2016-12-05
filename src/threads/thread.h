@@ -179,4 +179,9 @@ void thread_awake (int64_t ticks);
 void update_next_tick_to_awake (int64_t ticks);
 int64_t get_next_tick_to_awake (void);
 
+/* Priority Scheduling */
+void test_max_priority (void);
+bool cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
+                   void *aux UNUSED);
+
 #endif /* threads/thread.h */

@@ -236,6 +236,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+if (priority > thread_get_priority ())
+    thread_yield ();
+
   return tid;
 }
 
@@ -272,7 +275,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -349,7 +352,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, cmp_priority, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -377,6 +380,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  test_max_priority ();
 }
 
 /* Returns the current thread's priority. */
@@ -631,8 +635,8 @@ thread_sleep (int64_t ticks)
   struct thread *t = thread_current ();
 
   /* 현재 thread 가 idle thread 가 아니라면 thread 가 깨어나야 할 틱을 저장 */
-  if (t != idle_thread)
-    t->wakeup_tick = ticks;
+  ASSERT (t != idle_thread)
+  t->wakeup_tick = ticks;
 
   /* thread 를 sleep queue  */
   list_push_back (&sleep_list, &t->elem);
@@ -656,9 +660,7 @@ thread_awake (int64_t ticks)
   struct list_elem *e;
 
   /* 모든 리스트를 순회하며 */
-  for (e = list_begin (&sleep_list);
-       e != list_end (&sleep_list);
-       e)
+  for (e = list_begin (&sleep_list); e != list_end (&sleep_list); e)
     {
       struct thread *t = list_entry(e, struct thread, elem);
 
@@ -690,4 +692,26 @@ int64_t
 get_next_tick_to_awake (void)
 {
   return next_tick_to_awake;
+}
+
+void
+test_max_priority (void)
+{
+  if (!list_empty (&ready_list))
+    {  
+      struct thread *t = list_entry (list_front (&ready_list), struct thread,
+                                     elem);
+      if (t->priority > thread_current ()->priority)
+        thread_yield ();
+    }
+}
+
+bool
+cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
+              void *aux UNUSED)
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  
+  return a->priority > b->priority;
 }
