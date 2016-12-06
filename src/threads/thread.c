@@ -236,7 +236,8 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-if (priority > thread_get_priority ())
+  /* 생성된 thread 의 우선순위가 현재 thread 의 우선순위보다 높다면 양보 */
+  if (priority > thread_get_priority ())
     thread_yield ();
 
   return tid;
@@ -275,6 +276,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  /* ready list 에 thread 를 우선순위대로 삽입 */
   list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -352,6 +354,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
+    /* ready list 에 thread 를 우선순위대로 삽입 */
     list_insert_ordered (&ready_list, &cur->elem, cmp_priority, NULL);
   cur->status = THREAD_READY;
   schedule ();
@@ -380,6 +383,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  /* thrad 의 우선순위가 변경될 때 우선순위에 따라 스케줄링 */
   test_max_priority ();
 }
 
@@ -694,18 +698,22 @@ get_next_tick_to_awake (void)
   return next_tick_to_awake;
 }
 
+/* 현재 수행중인 thread 와 가장 우선순위가 높은 thread 를 비교하여 스케줄링 */
 void
 test_max_priority (void)
 {
+  /* ready list 가 비어있지 않다면 */
   if (!list_empty (&ready_list))
     {  
       struct thread *t = list_entry (list_front (&ready_list), struct thread,
                                      elem);
+      /* 우선순위가 가장 높은 thread 와 현재 thread 의 우선순위를 비교 */
       if (t->priority > thread_current ()->priority)
         thread_yield ();
     }
 }
 
+/* 인자로 주어진 thread 들의 우선순위 비교 */
 bool
 cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
               void *aux UNUSED)
