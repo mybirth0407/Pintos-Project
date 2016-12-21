@@ -514,6 +514,11 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /* 자식 리스트 초기화 */
   list_init (&t->child_list);
+
+  /* 우선순위 기부 관련 자료구조 초기화 */
+  t->init_priority = priority;
+  lock_init (t->wait_on_lock);
+  list_init (&t->donations);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -687,8 +692,8 @@ void
 update_next_tick_to_awake (int64_t ticks)
 {
   /* ticks 와 next_tick_to_awake 중 더 작은 것을 선택  */
-  next_tick_to_awake = (ticks < next_tick_to_awake) ?
-                        ticks: next_tick_to_awake; 
+  if (ticks < next_tick_to_awake)
+    next_tick_to_awake = ticks;
 }
 
 /* thread.c 의 next_tick_to_awake 반환 */
@@ -722,4 +727,22 @@ cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *b = list_entry (b_, struct thread, elem);
   
   return a->priority > b->priority;
+}
+
+void
+donate_priority (void)
+{
+
+}
+
+void
+remove_with_lock (struct lock *lock)
+{
+
+}
+
+void
+refresh_priority (void)
+{
+
 }

@@ -203,7 +203,12 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  ASSERT (lock->holder == NULL);
+
+
   sema_down (&lock->semaphore);
+  thread_current ()->wait_on_lock = NULL;
+
   lock->holder = thread_current ();
 }
 
