@@ -136,14 +136,10 @@ struct thread
     /* 해당 thread 가 깨어나야 할 tick */
     int64_t wakeup_tick;
 
-    /* Priorty Inversion Problem */
-    /* donation 이후 우선순위를 초기화하기 위해 초기값 저장 */
+    /* Priority Inversion Problem */
     int init_priority;
-    /* 해당 thread 가 대기하고 있는 lock 자료구조의 주소를 저장 */
     struct lock *wait_on_lock;
-    /* multiple donation */
     struct list donations;
-    /* multiple donation */
     struct list_elem donation_elem;
   };
 
