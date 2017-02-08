@@ -388,8 +388,10 @@ thread_set_priority (int new_priority)
   /* thread 의 우선순위가 변경될 때 우선순위에 따라 스케줄링 */
   refresh_priority ();
 
+  /* 스케줄링 후 현재 thread 가 우선순위가 높아졌다면 우선순위 기부 */
   if (cur->priority > old_priority)
     donate_priority ();
+  /* 스케줄링 후 현재 thread 의 우선순위가 낮아졌다면 thread 양보 */
   else if (cur->priority < old_priority)
     test_max_priority ();
 }
@@ -739,7 +741,9 @@ cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
 void
 donate_priority (void)
 {
+  /* 최대 nested 크기 */
   const int NESTED_DEPTH = 8;
+  
   int depth;
   struct thread *cur = thread_current ();
   struct lock *cur_wait_on_lock = cur->wait_on_lock;
@@ -754,7 +758,7 @@ donate_priority (void)
         break;
       /* 현재 thread 가 기다리는 lock 을 잡고 있는 thread 가
          현재 thread 보다 우선순위가 높아서 donation 할 필요가 없다면 */
-      if (cur_wait_on_lock->holder->priority >= cur->priority)
+      if (cur_wait_on_lock->holder->priority > cur->priority)
         break;
 
       /* Priority donation */
@@ -785,13 +789,25 @@ void
 refresh_priority (void)
 {
   struct thread *cur = thread_current ();
-  cur->priority = cur->init_priority;
+  struct list_elem *e;
 
-  if (!list_empty (&cur->donations))
+  /* 현재 thread 의 우선순위를 처음 우선순위로 초기화 */
+  cur->priority = cur->init_priority;
+  /* 우선순위 중 최소값 */
+  int highest_priority = PRI_MIN;
+
+  /* 현재 thread 가 잡고있는 lock 을 기다리는 thread 들 중 가장 높은 우선순위 */
+  for (e = list_begin (&cur->donations);
+       e != list_end (&cur->donations);
+       e = list_next (e))
     {
-      struct thread *t = list_entry (list_front (&cur->donations),
-                                     struct thread,
-                                     donation_elem);
-      cur->priority = t->priority > cur->priority ? t->priority: cur->priority;
+      struct thread *t = list_entry (e, struct thread, donation_elem);
+      highest_priority =
+          t->priority > highest_priority ? t->priority: highest_priority;
     }
+
+    /* 현재 thread 의 우선순위보다 lock 을 기다리는 thread 들의 우선순위가
+       더 높다면 현재 thread 가 우선순위를 기부받음 */
+    cur->priority =
+        highest_priority > cur->priority ? highest_priority: cur->priority;
 }

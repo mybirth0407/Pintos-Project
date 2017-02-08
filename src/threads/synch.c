@@ -210,21 +210,11 @@ lock_acquire (struct lock *lock)
       /* 기다리는 lock 주소를 저장 */
       cur->wait_on_lock = lock;
       /* donation 을 받은 thread 를 list 로 관리 */
-
-      if (lock->holder != NULL
-       && lock->holder->priority < cur->priority)
-        {
-          lock->holder->priority = cur->priority;
-          list_insert_ordered (&lock->holder->donations,
-                               &cur->donation_elem,
-                               cmp_priority,
-                               NULL);
-        }
+      list_push_back (&lock->holder->donations, &cur->donation_elem);
       /* priority donation 을 수행 */
       donate_priority ();
       // list_push_back (&cur->donations, &cur->donation_elem);
     }
-
 
   sema_down (&lock->semaphore);
   cur->wait_on_lock = NULL;
