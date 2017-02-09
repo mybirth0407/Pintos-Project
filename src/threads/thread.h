@@ -141,6 +141,10 @@ struct thread
     struct lock *wait_on_lock;
     struct list donations;
     struct list_elem donation_elem;
+
+    /* Multi-Level Feedback Queue */
+    int nice;
+    int recent_cpu;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -194,5 +198,12 @@ bool cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
 void donate_priority (void);
 void remove_with_lock (struct lock *lock);
 void refresh_priority (void);
+
+/* Multi-Level Feedback Queue */
+void mlfqs_priority (struct thread *t);
+void mlfqs_recent_cpu (struct thread *t);
+void mlfqs_load_avg (void);
+void mlfqs_increment (void);
+void mlfqs_recalc (void);
 
 #endif /* threads/thread.h */

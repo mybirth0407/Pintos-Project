@@ -205,7 +205,7 @@ lock_acquire (struct lock *lock)
 
   struct thread *cur = thread_current ();
 
-  if (lock->holder != NULL)
+  if (lock->holder != NULL && !thread_mlfqs)
     {
       /* 기다리는 lock 주소를 저장 */
       cur->wait_on_lock = lock;
@@ -213,7 +213,6 @@ lock_acquire (struct lock *lock)
       list_push_back (&lock->holder->donations, &cur->donation_elem);
       /* priority donation 을 수행 */
       donate_priority ();
-      // list_push_back (&cur->donations, &cur->donation_elem);
     }
 
   sema_down (&lock->semaphore);
@@ -255,8 +254,11 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
 
-  remove_with_lock (lock);
-  refresh_priority ();
+  if (!thread_mlfqs)
+    {
+      remove_with_lock (lock);
+      refresh_priority ();
+    }
 
   sema_up (&lock->semaphore);
 }
