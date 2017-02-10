@@ -145,6 +145,9 @@ struct thread
     /* Multi-Level Feedback Queue */
     int nice;
     int recent_cpu;
+
+    /* Virtual Memory */
+    struct hash vm;
   };
 
 /* If false (default), use round-robin scheduler.

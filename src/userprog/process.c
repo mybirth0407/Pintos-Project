@@ -43,6 +43,9 @@ int process_add_file (struct file *f);
 struct file *process_get_file (int fd);
 void process_close_file (int fd);
 
+/* Virtual Memory */
+bool handle_mm_fault (struct vm_entry *vme);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -711,4 +714,11 @@ process_close_file (int fd)
       /* 파일 디스크립터 테이블은 충분하므로 fd 를 -1 하지 않아도 됨 */
       thread_current ()->fd_table[fd] = NULL;
     }
+}
+
+/* Page fualt 발생 시 물리 페이지를 할당 */
+bool
+handle_mm_fault (struct vm_entry *vme)
+{
+
 }

@@ -42,6 +42,14 @@ unsigned tell (int fd);
 int open (const char *file);
 int filesize (int fd);
 
+/* Virtual Memory */
+void check_valid_buffer (void *buffer, unsigned size, void *esp, bool to_write);
+void check_valid_string (const void *str, void *esp);
+void unpin_ptr (void *vaddr);
+void unpin_string (void *str);
+void unpin_buffer (void *buffer, unsigned size);
+
+
 void
 syscall_init (void) 
 {
@@ -137,6 +145,7 @@ syscall_handler (struct intr_frame *f)
 void
 check_address (void *addr)
 {
+  /* 유저 메모리 영역이 아니면 프로그램 종료 */
   if (!is_user_vaddr (addr) || addr <= USER_VADDR_BOTTOM)
     exit (-1);
 }
@@ -319,7 +328,6 @@ open (const char *file)
       return -1;
     }
   int fd = process_add_file (f);
-  // lock_release (&file_lock);
   return fd;
 }
 
@@ -340,4 +348,41 @@ filesize (int fd)
     }
   else
     return -1;
+}
+
+/* Buffer 의 유효성을 검사 */
+void
+check_valid_buffer (void *buffer, unsigned size, void *esp, bool to_write)
+{
+  // check_address 사용
+}
+
+/* String 의 유효성을 검사 */
+void
+check_valid_string (const void *str, void *esp)
+{
+  // check_address 사용
+}
+
+/* find_vme () 를 사용하여 해당 주소의 vm_entry 검색 */
+void
+unpin_ptr (void *vaddr)
+{
+
+}
+
+/* Buffer 내의 vm_entry 값을 false 로 변경 */
+void
+unpin_buffer (void *buffer, unsigned size)
+{
+  // unpin_ptr 사용
+
+}
+
+/* 문자열 내의 vm_entry 값을 false 로 변경 */
+void
+unpin_string (void *str)
+{
+  // unpin_ptr 사용
+
 }
